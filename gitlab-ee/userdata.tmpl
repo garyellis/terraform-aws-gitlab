@@ -1,0 +1,177 @@
+#!/bin/bash -x
+
+exec > /tmp/bootstrap.log 2>&1
+
+
+# proxy config
+USE_PROXY=false
+PROXY=http://placeholder:
+
+# gitlab endpoint config
+dns_fqdn=${dns_fqdn}
+
+# backup config
+backups_s3_bucket_region=${backups_s3_bucket_region}
+backups_s3_bucket=${backups_s3_bucket}
+
+# tls config
+tls_cert_selfsigned=true
+tls_cert_selfsigned_subject="/C=US/ST=Arizona/L=Scottsdale/O=EA/CN=$dns_fqdn"
+tls_cert_parameter_store=false
+
+# ssm config
+ssm_region=${ssm_region}
+ssm_parameter_root_password=${ssm_parameter_root_password}
+ssm_parameter_runner_registration_token=${ssm_parameter_runner_registration_token}
+
+# disk config
+disk=${secondary_block_device}
+vgname=vg-data
+lvname=lv-data
+mount_path=/opt
+fstype=xfs
+
+
+function setup_data_volume(){
+  # install lvm package
+  yum -y install the lvm2
+
+  # setup the lvm physical volume
+  if grep -q "$disk" <<<$(pvs 2>/dev/null); then
+    echo "physical volume $disk already exists. skipping pvcreate."
+  else
+    pvcreate $disk
+  fi
+
+  # setup the lvm volume group
+  if grep -q "$vgname" <<<$(vgs 2>/dev/null); then
+    echo "volume group $vgname already exists. skipping vgcreate."
+  else
+    vgcreate $vgname /dev/nvme1n1
+  fi
+
+  # setup the lvm logical volume
+  if grep -q "$lvname $vgname" <<<$(lvs 2>/dev/null); then
+    echo "logical volume $lvname already exists. skipping lvcreate."
+  else
+    lvcreate -n $lvname -l 100%FREE $vgname
+  fi
+
+
+  # setup the filesystem
+  mkfscmd="mkfs.$${fstype}"
+
+  if grep -qi "$fstype" <<<$(file -sL /dev/$vgname/$lvname); then
+    echo "filesystem already exists on /dev/$vgname/$lvname. skipping $${mkfscmd}."
+  else
+    $mkfscmd /dev/$vgname/$lvname
+  fi
+
+  mkdir -p $mount_path
+
+  block_uuid=$(blkid /dev/$vgname/$lvname|awk '{print $2}'|sed 's/"//g')
+  if grep -q "$block_uuid" /etc/fstab ; then
+    echo "device $block_uuid $mount_path already exists in fstab. skipping append record to fstab."
+  else
+    echo "$block_uuid $mount_path    $fstype    defaults    0 0" >> /etc/fstab
+  fi
+
+  mount -a
+}
+
+function install_awscli_bundle(){
+    yum -y install unzip
+    curl "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip"
+    unzip awscli-bundle.zip
+    ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
+    rm -f awscli-bundle.zip
+}
+
+function install_gitlab(){
+    yum install -y curl policycoreutils-python
+    curl https://packages.gitlab.com/install/repositories/gitlab/gitlab-ee/script.rpm.sh | bash
+    yum install -y gitlab-ee
+}
+
+function ssm_get_parameter(){
+  aws --region $${ssm_region} ssm get-parameters --name $1 --with-decryption| python -c 'import json,sys;print json.load(sys.stdin)["Parameters"][0]["Value"]'
+}
+
+
+
+
+
+#### prep system, install configuration deps deps and the application
+setup_data_volume
+install_awscli_bundle
+install_gitlab
+
+
+#### configure the application
+server_certificate_path=/etc/gitlab/ssl/server.crt
+server_certificate_key_path=/etc/gitlab/ssl/server.key
+
+mkdir -p /etc/gitlab/ssl
+chmod 0700 /etc/gitlab/ssl
+
+#### setup a self signed certificate when tls_cert_selfsigned is true
+if [ "$tls_cert_selfsigned" = "true" ]; then
+
+    openssl req -new -nodes -x509 -subj "$tls_cert_selfsigned_subject" \
+      -days 730 \
+      -keyout $server_certificate_key_path \
+      -out $server_certificate_path \
+      -extensions v3_ca
+
+fi
+
+
+cat > /etc/gitlab/gitlab.rb <<EOF
+external_url "https://$${dns_fqdn}"
+nginx['redirect_http_to_https'] = 'true'
+nginx['ssl_certificate'] = '$server_certificate_path'
+nginx['ssl_certificate_key'] = '$server_certificate_key_path'
+gitlab_rails['initial_root_password'] = '$(ssm_get_parameter $ssm_parameter_root_password)'
+gitlab_rails['initial_shared_runners_registration_token'] = '$(ssm_get_parameter $ssm_parameter_runner_registration_token)'
+gitlab_rails['backup_upload_connection'] = {
+  'provider' => 'AWS',
+  'region' => '$backups_s3_bucket_region',
+  'use_iam_profile' => true
+}
+gitlab_rails['backup_upload_remote_directory'] = '$backups_s3_bucket'
+gitlab_rails['monitoring_whitelist'] = ['0.0.0.0/0']
+
+EOF
+
+chmod 0600 /etc/gitlab/gitlab.rb
+
+
+#### cloud-init blocks gitlab-runsvdir (executed by gitlab-ctl reconfigure)
+#### workaround this issue with a post install cron task
+
+cat > /usr/local/bin/postinstall.sh <<EOF
+#!/bin/bash -x
+
+exec > /tmp/postinstall.sh.log 2>&1
+
+until systemctl is-active multi-user.target; do
+  echo "waiting for is-active multi-user.target..."
+  sleep 5
+done
+
+gitlab-ctl reconfigure
+systemctl restart gitlab-runsvdir
+
+rm -f /etc/cron.d/postinstall
+
+EOF
+
+chmod 0700 /usr/local/bin/postinstall.sh
+chown root:root /usr/local/bin/postinstall.sh
+echo "* * * * * root . /etc/profile; /usr/local/bin/postinstall.sh" > /etc/cron.d/postinstall
+
+
+
+#### setup backup cron jobs
+# https://docs.gitlab.com/ee/raketasks/backup_restore.html#configuring-cron-to-make-daily-backups
+# gitlab-backup create DIRECTORY=daily
