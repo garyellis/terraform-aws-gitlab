@@ -1,7 +1,7 @@
 KEY_NAME=garyellis
 NAME=tf-module-gitlab
 VPC_NAME=gellis
-SUBNET_NAME="private-a"
+SUBNET_NAME="private-restricted-a"
 AMI_ID=ami-3ecc8f46
 DNS_NAME=gitlab-ee
 DNS_DOMAIN=ews.works

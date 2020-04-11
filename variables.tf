@@ -67,3 +67,21 @@ variable "ssm_kms_key_arn" {
   description = "the kms key used to decrypt ssm parameter values"
   type        = string
 }
+
+variable "http_proxy" {
+  description = "the http proxy"
+  type        = string
+  default     = ""
+}
+
+variable "https_proxy" {
+  description = "the https proxy"
+  type        = string
+  default     = ""
+}
+
+variable "no_proxy" {
+  description = "the no proxy list"
+  type        = string
+  default     = ""
+}

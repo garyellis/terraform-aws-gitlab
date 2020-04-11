@@ -200,6 +200,10 @@ locals {
     ssm_parameter_root_password             = aws_ssm_parameter.gitlab_root_password.name
     ssm_parameter_runner_registration_token = aws_ssm_parameter.gitlab_runner_registration_token.name
     secondary_block_device                  = "/dev/nvme1n1"
+
+    http_proxy  = var.http_proxy
+    https_proxy = var.https_proxy
+    no_proxy    = var.no_proxy
   })
 }
 
@@ -209,7 +213,7 @@ module "userdata_docker" {
   base64_encode          = false
   gzip                   = false
   install_docker         = true
-  install_docker_compose = true
+  install_docker_compose = false
   extra_user_data_script = local.userdata_script
 }
 

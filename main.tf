@@ -13,6 +13,10 @@ module "gitlab_ee" {
   tags          = var.tags
 
   ssm_kms_key_arn = var.ssm_kms_key_arn
+
+  http_proxy  = var.http_proxy
+  https_proxy = var.https_proxy
+  no_proxy    = var.no_proxy
 }
 
 module "gitlab_runner" {
@@ -29,4 +33,8 @@ module "gitlab_runner" {
   gitlab_addr                                    = module.gitlab_ee.gitlab_url
   ssm_kms_key_arn                                = var.ssm_kms_key_arn
   ssm_parameter_gitlab_runner_registration_token = module.gitlab_ee.ssm_parameter_gitlab_runner_registration_token
+
+  http_proxy  = var.http_proxy
+  https_proxy = var.https_proxy
+  no_proxy    = var.no_proxy
 }

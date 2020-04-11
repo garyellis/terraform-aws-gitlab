@@ -26,6 +26,11 @@ module "gitlab" {
   tags                     = var.tags
 
   ssm_kms_key_arn = var.ssm_kms_key_arn
+
+  http_proxy = "http://squid-proxy.shared-services.ews.works:3128"
+  https_proxy = "http://squid-proxy.shared-services.ews.works:3128"
+  no_proxy = "localhost,127.0.0.1,::1,169.254.169.254,169.254.170.2,ews.works"
+
 }
 
 output "gitlab_url" {

@@ -92,6 +92,10 @@ locals {
     gitlab_addr                                    = var.gitlab_addr
     ssm_region                                     = data.aws_region.current.name
     ssm_parameter_gitlab_runner_registration_token = lookup(var.ssm_parameter_gitlab_runner_registration_token, "name")
+
+    http_proxy  = var.http_proxy
+    https_proxy = var.https_proxy
+    no_proxy    = var.no_proxy
   })
 }
 

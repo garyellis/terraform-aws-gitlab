@@ -4,8 +4,9 @@ exec > /tmp/bootstrap.log 2>&1
 
 
 # proxy config
-USE_PROXY=false
-PROXY=http://placeholder:
+http_proxy="${http_proxy}"
+https_proxy="${https_proxy}"
+no_proxy="${no_proxy}"
 
 # gitlab endpoint config
 dns_fqdn=${dns_fqdn}
@@ -31,6 +32,22 @@ lvname=lv-data
 mount_path=/opt
 fstype=xfs
 
+
+function proxy(){
+  if [ ! -z $http_proxy ]; then
+    cat > /etc/profile.d/proxy.sh <<EOF
+export http_proxy=$http_proxy
+export https_proxy=$https_proxy
+export no_proxy=$no_proxy
+export HTTP_PROXY=$http_proxy
+export HTTPS_PROXY=$https_proxy
+export NO_PROXY=$no_proxy
+EOF
+
+  fi
+
+  source /etc/profile.d/proxy.sh
+}
 
 function setup_data_volume(){
   # install lvm package
@@ -99,7 +116,8 @@ function ssm_get_parameter(){
 
 
 
-
+## setup environment
+proxy
 
 #### prep system, install configuration deps deps and the application
 setup_data_volume

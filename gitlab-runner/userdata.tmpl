@@ -2,10 +2,33 @@
 
 exec > /tmp/bootstrap.log 2>&1
 
+
+# proxy config
+http_proxy="${http_proxy}"
+https_proxy="${http_proxy}"
+no_proxy="${no_proxy}"
+
 # config
 gitlab_addr=${gitlab_addr}
 ssm_region=${ssm_region}
 gitlab_runner_registration_token=${ssm_parameter_gitlab_runner_registration_token}
+
+
+function proxy(){
+  if [ ! -z $http_proxy ]; then
+    cat > /etc/profile.d/proxy.sh <<EOF
+export http_proxy=$http_proxy
+export https_proxy=$https_proxy
+export no_proxy=$no_proxy
+export HTTP_PROXY=$http_proxy
+export HTTPS_PROXY=$https_proxy
+export NO_PROXY=$no_proxy
+EOF
+
+  fi
+
+  source /etc/profile.d/proxy.sh
+}
 
 function install_awscli_bundle(){
     yum -y install unzip
@@ -18,6 +41,11 @@ function install_awscli_bundle(){
 function ssm_get_parameter(){
   aws --region $${ssm_region} ssm get-parameters --name $1 --with-decryption| python -c 'import json,sys;print json.load(sys.stdin)["Parameters"][0]["Value"]'
 }
+
+
+## setup environment
+proxy
+
 
 install_awscli_bundle
 
