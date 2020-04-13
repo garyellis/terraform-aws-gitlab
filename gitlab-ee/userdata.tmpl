@@ -3,12 +3,8 @@
 exec > /tmp/bootstrap.log 2>&1
 
 
-# proxy config
-http_proxy="${http_proxy}"
-https_proxy="${https_proxy}"
-no_proxy="${no_proxy}"
-
 # gitlab endpoint config
+gitlab_ee_version=${gitlab_ee_version}
 dns_fqdn=${dns_fqdn}
 
 # backup config
@@ -32,22 +28,6 @@ lvname=lv-data
 mount_path=/opt
 fstype=xfs
 
-
-function proxy(){
-  if [ ! -z $http_proxy ]; then
-    cat > /etc/profile.d/proxy.sh <<EOF
-export http_proxy=$http_proxy
-export https_proxy=$https_proxy
-export no_proxy=$no_proxy
-export HTTP_PROXY=$http_proxy
-export HTTPS_PROXY=$https_proxy
-export NO_PROXY=$no_proxy
-EOF
-
-  fi
-
-  source /etc/profile.d/proxy.sh
-}
 
 function setup_data_volume(){
   # install lvm package
@@ -107,7 +87,8 @@ function install_awscli_bundle(){
 function install_gitlab(){
     yum install -y curl policycoreutils-python
     curl https://packages.gitlab.com/install/repositories/gitlab/gitlab-ee/script.rpm.sh | bash
-    yum install -y gitlab-ee
+    _gitlab_ee_version=$(yum list gitlab-ee --showduplicates | grep $gitlab_ee_version|sort -r|tail -1|awk '{print $2}'|sed 's/.*://g')
+    yum install -y gitlab-ee-$${_gitlab_ee_version}
 }
 
 function ssm_get_parameter(){
@@ -116,10 +97,11 @@ function ssm_get_parameter(){
 
 
 
-## setup environment
-proxy
+#### setup environment
+source /root/.bashrc
 
-#### prep system, install configuration deps deps and the application
+
+#### prep system, install configuration deps, and install the application
 setup_data_volume
 install_awscli_bundle
 install_gitlab
@@ -131,6 +113,7 @@ server_certificate_key_path=/etc/gitlab/ssl/server.key
 
 mkdir -p /etc/gitlab/ssl
 chmod 0700 /etc/gitlab/ssl
+
 
 #### setup a self signed certificate when tls_cert_selfsigned is true
 if [ "$tls_cert_selfsigned" = "true" ]; then
@@ -192,4 +175,4 @@ echo "* * * * * root . /etc/profile; /usr/local/bin/postinstall.sh" > /etc/cron.
 
 #### setup backup cron jobs
 # https://docs.gitlab.com/ee/raketasks/backup_restore.html#configuring-cron-to-make-daily-backups
-# gitlab-backup create DIRECTORY=daily
+echo "0 7 * * * root . /etc/profile; gitlab-backup create DIRECTORY=daily" > /etc/cron.d/gitlab-backup

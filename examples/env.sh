@@ -2,9 +2,11 @@ KEY_NAME=garyellis
 NAME=tf-module-gitlab
 VPC_NAME=gellis
 SUBNET_NAME="private-restricted-a"
+NOPROXY_SUBNET_NAME="private-a"
 AMI_ID=ami-3ecc8f46
 DNS_NAME=gitlab-ee
 DNS_DOMAIN=ews.works
+NOPROXY_DNS_NAME=gitlab-ee-noproxy
 DNS_ZONE_ID=Z1NMUGQLTLR1UM
 
 
@@ -34,5 +36,12 @@ export TF_VAR_gitlab_subnet_id=$subnet_id
 subnet_ids=$(printf '"%s",' $(get_subnets $vpc_id $SUBNET_NAME))
 export TF_VAR_gitlab_runner_subnet_ids=[${subnet_ids}]
 
+
+export TF_VAR_gitlab_noproxy_dns_name=$NOPROXY_DNS_NAME
+noproxy_subnet_id=$(get_subnets $vpc_id $NOPROXY_SUBNET_NAME)
+export TF_VAR_gitlab_noproxy_subnet_id=$noproxy_subnet_id
+
+noproxy_subnet_ids=$(printf '"%s",' $(get_subnets $vpc_id $NOPROXY_SUBNET_NAME))
+export TF_VAR_gitlab_noproxy_runner_subnet_ids=[${noproxy_subnet_ids}]
 
 export TF_VAR_ssm_kms_key_arn="arn:aws:kms:us-west-2:529332856614:key/8beac6f0-4321-4c06-97e2-ad3980b07f9b"

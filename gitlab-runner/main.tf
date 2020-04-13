@@ -57,6 +57,13 @@ resource "aws_iam_role_policy_attachment" "policy_attachment" {
   policy_arn = aws_iam_policy.policy.arn
 }
 
+resource "aws_iam_role_policy_attachment" "additional_policy_attachments" {
+  count = length(var.iam_role_policy_attachments)
+
+  role       = aws_iam_role.instance.name
+  policy_arn = var.iam_role_policy_attachments[count.index]
+}
+
 resource "aws_iam_role" "instance" {
   name_prefix        = var.name
   description        = "gitlab runner iam role"
@@ -89,24 +96,26 @@ module "sg" {
 
 locals {
   userdata_script = templatefile("${path.module}/userdata.tmpl", {
+    gitlab_runner_version                          = var.gitlab_runner_version
     gitlab_addr                                    = var.gitlab_addr
     ssm_region                                     = data.aws_region.current.name
     ssm_parameter_gitlab_runner_registration_token = lookup(var.ssm_parameter_gitlab_runner_registration_token, "name")
-
-    http_proxy  = var.http_proxy
-    https_proxy = var.https_proxy
-    no_proxy    = var.no_proxy
   })
 }
 
 module "userdata" {
-  source = "github.com/garyellis/tf_module_cloud_init"
+  source = "github.com/garyellis/tf_module_cloud_init?ref=v0.2.3"
 
   base64_encode          = false
   gzip                   = false
   install_docker         = true
-  install_docker_compose = true
+  install_docker_compose = false
   extra_user_data_script = local.userdata_script
+
+  install_http_proxy_env = var.http_proxy == "" ? false : true
+  http_proxy             = var.http_proxy
+  https_proxy            = var.https_proxy
+  no_proxy               = var.no_proxy
 }
 
 module "instance" {
@@ -134,9 +143,9 @@ module "instance" {
   recreate_asg_when_lc_changes = true
   vpc_zone_identifier          = var.subnet_ids
   health_check_type            = "EC2"
-  min_size                     = 0
-  max_size                     = 3
-  desired_capacity             = 3
+  min_size                     = var.asg_min_size
+  max_size                     = var.asg_max_size
+  desired_capacity             = var.asg_desired_capacity
   wait_for_capacity_timeout    = 0
   tags_as_map                  = var.tags
 }

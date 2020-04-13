@@ -1,3 +1,9 @@
+variable "gitlab_runner_version" {
+  description = "the gitlab runner version"
+  type        = string
+  default     = "12.9.0"
+}
+
 variable "name" {
   description = "the resources name"
   type        = string
@@ -29,6 +35,27 @@ variable "key_name" {
   description = "assign a keypair to the ec2 instance. Overrides the default keypair name when var.key_public_key_material and var.key_name are set"
   type        = string
   default     = ""
+}
+
+variable "iam_role_policy_attachments" {
+  description = "A list of iam policies attached to the ec2 instance role"
+  type        = list(string)
+  default     = []
+}
+
+variable "asg_min_size" {
+  description = "The minimum size of the gitlab runner asg"
+  type        = string
+}
+
+variable "asg_max_size" {
+  description = "The maximum size of the gitlab runner asg"
+  type        = string
+}
+
+variable "asg_desired_capacity" {
+  description = "The number of ec2 instances that should be running"
+  type        = string
 }
 
 variable "tags" {

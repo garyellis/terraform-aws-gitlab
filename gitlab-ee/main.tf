@@ -193,6 +193,7 @@ module "sg" {
 
 locals {
   userdata_script = templatefile("${path.module}/userdata.tmpl", {
+    gitlab_ee_version                       = var.gitlab_ee_version
     dns_fqdn                                = format("%s.%s", var.dns_name, var.dns_domain)
     backups_s3_bucket                       = module.backups_s3_bucket.this_s3_bucket_id
     backups_s3_bucket_region                = data.aws_region.current.name
@@ -200,21 +201,22 @@ locals {
     ssm_parameter_root_password             = aws_ssm_parameter.gitlab_root_password.name
     ssm_parameter_runner_registration_token = aws_ssm_parameter.gitlab_runner_registration_token.name
     secondary_block_device                  = "/dev/nvme1n1"
-
-    http_proxy  = var.http_proxy
-    https_proxy = var.https_proxy
-    no_proxy    = var.no_proxy
   })
 }
 
-module "userdata_docker" {
-  source = "github.com/garyellis/tf_module_cloud_init"
+module "userdata" {
+  source = "github.com/garyellis/tf_module_cloud_init?ref=v0.2.3"
 
   base64_encode          = false
   gzip                   = false
   install_docker         = true
   install_docker_compose = false
   extra_user_data_script = local.userdata_script
+
+  install_http_proxy_env = var.http_proxy == "" ? false : true
+  http_proxy             = var.http_proxy
+  https_proxy            = var.https_proxy
+  no_proxy               = var.no_proxy
 }
 
 
@@ -225,7 +227,7 @@ module "instance" {
   name                        = var.name
   ami_id                      = var.ami_id
   iam_instance_profile        = aws_iam_instance_profile.instance.name
-  user_data                   = module.userdata_docker.cloudinit_userdata
+  user_data                   = module.userdata.cloudinit_userdata
   instance_type               = var.instance_type
   key_name                    = var.key_name
   associate_public_ip_address = false

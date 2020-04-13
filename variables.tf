@@ -1,3 +1,15 @@
+variable "gitlab_ee_version" {
+  description = "the gitlab runner version"
+  type        = string
+  default     = "12.9.2"
+}
+
+variable "gitlab_runner_version" {
+  description = "the gitlab runner version"
+  type        = string
+  default     = "12.9.0"
+}
+
 variable "name" {
   description = "A a name prefix applied to all resources"
   type        = string
@@ -34,6 +46,12 @@ variable "vpc_id" {
   type        = string
 }
 
+variable "gitlab_runner_iam_role_policy_attachments" {
+  description = "A list of iam policies attached to the gitlab runner iam role"
+  type        = list(string)
+  default     = []
+}
+
 variable "tags" {
   description = "A map of tags applied to all taggable resources"
   type        = map(string)
@@ -61,6 +79,24 @@ variable "gitlab_runner_instance_type" {
   description = "The gitlab runner ec2 instance type"
   type        = string
   default     = "t3.medium"
+}
+
+variable "gitlab_runner_asg_min_size" {
+  description = "The minimum size of the gitlab runner asg"
+  type        = number
+  default     = 1
+}
+
+variable "gitlab_runner_asg_max_size" {
+  description = "The maximum size of the gitlab runner asg"
+  type        = number
+  default     = 1
+}
+
+variable "gitlab_runner_asg_desired_capacity" {
+  description = "The number of ec2 instances that should be running"
+  type        = number
+  default     = 1
 }
 
 variable "ssm_kms_key_arn" {

@@ -3,32 +3,12 @@
 exec > /tmp/bootstrap.log 2>&1
 
 
-# proxy config
-http_proxy="${http_proxy}"
-https_proxy="${http_proxy}"
-no_proxy="${no_proxy}"
-
 # config
+gitlab_runner_version=${gitlab_runner_version}
 gitlab_addr=${gitlab_addr}
 ssm_region=${ssm_region}
 gitlab_runner_registration_token=${ssm_parameter_gitlab_runner_registration_token}
 
-
-function proxy(){
-  if [ ! -z $http_proxy ]; then
-    cat > /etc/profile.d/proxy.sh <<EOF
-export http_proxy=$http_proxy
-export https_proxy=$https_proxy
-export no_proxy=$no_proxy
-export HTTP_PROXY=$http_proxy
-export HTTPS_PROXY=$https_proxy
-export NO_PROXY=$no_proxy
-EOF
-
-  fi
-
-  source /etc/profile.d/proxy.sh
-}
 
 function install_awscli_bundle(){
     yum -y install unzip
@@ -38,41 +18,57 @@ function install_awscli_bundle(){
     rm -f awscli-bundle.zip
 }
 
+function install_gitlab_runner(){
+  curl -L https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.rpm.sh | bash
+  _gitlab_runner_version=$(yum list gitlab-runner --showduplicates | grep $gitlab_runner_version|sort -r|tail -1|awk '{print $2}'|sed 's/.*://g')
+  export GITLAB_RUNNER_DISABLE_SKEL=true; yum -y install gitlab-runner-$${_gitlab_runner_version}
+}
+
 function ssm_get_parameter(){
   aws --region $${ssm_region} ssm get-parameters --name $1 --with-decryption| python -c 'import json,sys;print json.load(sys.stdin)["Parameters"][0]["Value"]'
 }
 
 
-## setup environment
-proxy
+#### setup environment
+source /root/.bashrc
 
 
+#### prep system, install configuration deps, and install the application
 install_awscli_bundle
+install_gitlab_runner
 
 
-gitlab_domain_name=$(echo $gitlab_addr |awk -F[/:] '{print $4}')
-curl -L https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.rpm.sh | bash
-export GITLAB_RUNNER_DISABLE_SKEL=true; yum -y install gitlab-runner
-
-
-# wait for the gitlab server to come up
+##### wait for the gitlab server to become available
 until (curl -f -sk $${gitlab_addr}/-/health |grep 'GitLab OK'); do
   echo 'waiting for gitlab server to become ready'
   sleep 5
 done
 
 
-# download the gitlab server certificate and update ca trust
+##### download the gitlab server certificate and update ca trust
 mkdir -p /etc/gitlab-runner/certs
 
+gitlab_domain_name=$(echo $gitlab_addr |awk -F[/:] '{print $4}')
 openssl s_client -connect $${gitlab_domain_name}:443 </dev/null 2>/dev/null | openssl x509 > /etc/gitlab-runner/certs/$${gitlab_domain_name}.crt
 cp /etc/gitlab-runner/certs/$${gitlab_domain_name}.crt /etc/pki/ca-trust/source/anchors
 update-ca-trust
 
 
-# register the shell runner
+##### setup the gitlab docker environment
+echo "[[runners]]" > /etc/gitlab-runner/config.template.toml
+if [ ! -z $HTTP_PROXY ]; then
+  cat >> /etc/gitlab-runner/config.template.toml <<EOF
+  environment = ["https_proxy=$HTTPS_PROXY", "http_proxy=$HTTP_PROXY", "no_proxy=$NO_PROXY", "HTTPS_PROXY=$HTTPS_PROXY", "HTTP_PROXY=$HTTP_PROXY", "NO_PROXY=$NO_PROXY"]
+EOF
+
+fi
+
+
+
+##### register the shell runner
 gitlab-runner register \
   --non-interactive \
+  --template-config /etc/gitlab-runner/config.template.toml \
   --url "$gitlab_addr" \
   --registration-token "$(ssm_get_parameter $gitlab_runner_registration_token)" \
   --executor "shell" \
@@ -81,9 +77,11 @@ gitlab-runner register \
   --run-untagged="true" \
   --locked="false"
 
-# register the docker runner
+
+##### register the docker runner
 gitlab-runner register \
   --non-interactive \
+  --template-config /etc/gitlab-runner/config.template.toml \
   --url "$gitlab_addr" \
   --registration-token "$(ssm_get_parameter $gitlab_runner_registration_token)" \
   --description "docker-runner_$${HOSTNAME}" \
