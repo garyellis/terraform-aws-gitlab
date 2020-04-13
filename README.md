@@ -1,4 +1,4 @@
-# tf-module-gitlab
+# terraform-aws-gitlab
 Deploy gitlab ee server and runners together or as separately.
 
 ### gitlab-ee
