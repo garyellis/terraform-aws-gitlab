@@ -7,6 +7,7 @@ variable "ami_id" {}
 variable "key_name" {}
 variable "vpc_id" {}
 variable "tags" { type = map(string) }
+variable "gitlab_disable_api_termination" { default = true }
 variable "gitlab_subnet_id" {}
 variable "gitlab_runner_subnet_ids" { type = list(string) }
 variable "gitlab_noproxy_subnet_id" {}
@@ -38,6 +39,7 @@ module "gitlab" {
   dns_name                                  = var.dns_name
   ami_id                                    = var.ami_id
   key_name                                  = var.key_name
+  gitlab_disable_api_termination            = var.gitlab_disable_api_termination
   gitlab_runner_iam_role_policy_attachments = list(aws_iam_policy.runner_policy.arn)
   gitlab_subnet_id                          = var.gitlab_subnet_id
   gitlab_runner_subnet_ids                  = var.gitlab_runner_subnet_ids

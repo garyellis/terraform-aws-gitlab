@@ -64,6 +64,13 @@ variable "gitlab_instance_type" {
   default     = "t3.xlarge"
 }
 
+variable "gitlab_disable_api_termination" {
+  description = "Protect the gitlab server from accidental ec2 instance termination"
+  type        = bool
+  default     = false
+}
+
+
 variable "gitlab_subnet_id" {
   description = "The gitlab server subnet id"
   type        = string

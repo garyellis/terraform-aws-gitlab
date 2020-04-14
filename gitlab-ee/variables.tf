@@ -46,6 +46,12 @@ variable "instance_type" {
   default     = "t3.xlarge"
 }
 
+variable "disable_api_termination" {
+  description = "protect from accidental ec2 instance termination"
+  type        = bool
+  default     = false
+}
+
 variable "key_name" {
   description = "assign a keypair to the ec2 instance. Overrides the default keypair name when var.key_public_key_material and var.key_name are set"
   type        = string

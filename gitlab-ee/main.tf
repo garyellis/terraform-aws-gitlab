@@ -229,6 +229,7 @@ module "instance" {
   iam_instance_profile        = aws_iam_instance_profile.instance.name
   user_data                   = module.userdata.cloudinit_userdata
   instance_type               = var.instance_type
+  disable_api_termination     = var.disable_api_termination
   key_name                    = var.key_name
   associate_public_ip_address = false
   security_group_attachments  = list(module.sg.security_group_id)
