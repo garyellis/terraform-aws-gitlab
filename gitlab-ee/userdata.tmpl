@@ -141,7 +141,13 @@ gitlab_rails['backup_upload_connection'] = {
 }
 gitlab_rails['backup_upload_remote_directory'] = '$backups_s3_bucket'
 gitlab_rails['monitoring_whitelist'] = ['0.0.0.0/0']
-
+$(if [ ! -z $HTTP_PROXY ]; then
+    echo "gitlab_rails['env'] = { \"http_proxy\" => \"$http_proxy\", \"https_proxy\" => \"$https_proxy\", \"no_proxy\" => \"$no_proxy\" }"
+    echo "gitaly['env'] = { \"http_proxy\" => \"$http_proxy\", \"https_proxy\" => \"$https_proxy\", \"no_proxy\" => \"$no_proxy\" }"
+    echo "gitlab_workhorse['env'] = { \"http_proxy\" => \"$http_proxy\", \"https_proxy\" => \"$https_proxy\", \"no_proxy\" => \"$no_proxy\" }"
+    echo "registry['env'] = { \"http_proxy\" => \"$http_proxy\", \"https_proxy\" => \"$https_proxy\", \"no_proxy\" => \"$no_proxy\" }"
+  fi
+)
 EOF
 
 chmod 0600 /etc/gitlab/gitlab.rb
