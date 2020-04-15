@@ -46,7 +46,7 @@ resource "aws_ssm_parameter" "gitlab_runner_registration_token" {
 module "backups_s3_bucket" {
   source = "terraform-aws-modules/s3-bucket/aws"
 
-  bucket        = format("%s-backups", var.name)
+  bucket_prefix = format("%s-backups", var.name)
   acl           = "private"
   force_destroy = true
   logging       = {}
