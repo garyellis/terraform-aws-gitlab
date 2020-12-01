@@ -88,6 +88,16 @@ variable "gitlab_runner_instance_type" {
   default     = "t3.medium"
 }
 
+variable "gitlab_runner_root_block_device" {
+  description = "the gitlab runner root block device setting"
+  type        = list(map(string))
+  default     = [{
+      encrypted   = true
+      volume_size = "50"
+      volume_type = "gp2"
+    }]
+}
+
 variable "gitlab_runner_asg_min_size" {
   description = "The minimum size of the gitlab runner asg"
   type        = number

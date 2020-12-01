@@ -58,3 +58,50 @@ output "ssm_parameter_gitlab_runner_registration_token" {
 }
 
 ```
+
+## Requirements
+
+
+## Providers
+
+| Name | Version |
+|------|---------|
+| aws | n/a |
+| random | n/a |
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| ami\_id | The ami id | `string` | n/a | yes |
+| dns\_domain | The route53 private zone domain name | `string` | n/a | yes |
+| dns\_name | The rout53 private zone dns name. (does not include the dns domain) | `string` | n/a | yes |
+| dns\_zone\_id | The route53 private zone dns id. | `string` | n/a | yes |
+| gitlab\_disable\_api\_termination | Protect the gitlab server from accidental ec2 instance termination | `bool` | `false` | no |
+| gitlab\_ee\_version | the gitlab runner version | `string` | `"12.9.2"` | no |
+| gitlab\_instance\_type | The gitlab server ec2 instance type | `string` | `"t3.xlarge"` | no |
+| gitlab\_runner\_asg\_desired\_capacity | The number of ec2 instances that should be running | `number` | `1` | no |
+| gitlab\_runner\_asg\_max\_size | The maximum size of the gitlab runner asg | `number` | `1` | no |
+| gitlab\_runner\_asg\_min\_size | The minimum size of the gitlab runner asg | `number` | `1` | no |
+| gitlab\_runner\_iam\_role\_policy\_attachments | A list of iam policies attached to the gitlab runner iam role | `list(string)` | `[]` | no |
+| gitlab\_runner\_instance\_type | The gitlab runner ec2 instance type | `string` | `"t3.medium"` | no |
+| gitlab\_runner\_root\_block\_device | the gitlab runner root block device setting | `list(map(string))` | <pre>[<br>  {<br>    "encrypted": true,<br>    "volume_size": "50",<br>    "volume_type": "gp2"<br>  }<br>]</pre> | no |
+| gitlab\_runner\_subnet\_ids | A list of subnet ids associated to the gitlab runner asg | `list(string)` | n/a | yes |
+| gitlab\_runner\_version | the gitlab runner version | `string` | `"12.9.0"` | no |
+| gitlab\_subnet\_id | The gitlab server subnet id | `string` | n/a | yes |
+| http\_proxy | the http proxy | `string` | `""` | no |
+| https\_proxy | the https proxy | `string` | `""` | no |
+| key\_name | The ec2 instances keypair | `string` | `""` | no |
+| name | A a name prefix applied to all resources | `string` | n/a | yes |
+| no\_proxy | the no proxy list | `string` | `""` | no |
+| ssm\_kms\_key\_arn | the kms key used to decrypt ssm parameter values | `string` | n/a | yes |
+| tags | A map of tags applied to all taggable resources | `map(string)` | `{}` | no |
+| vpc\_id | the target vpc | `string` | n/a | yes |
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| gitlab\_url | n/a |
+| ssm\_parameter\_gitlab\_root\_password | n/a |
+| ssm\_parameter\_gitlab\_runner\_registration\_token | n/a |

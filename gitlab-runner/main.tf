@@ -131,12 +131,7 @@ module "instance" {
   image_id             = var.ami_id
   instance_type        = var.instance_type
   security_groups      = list(module.sg.security_group_id)
-  root_block_device = [
-    {
-      volume_size = "50"
-      volume_type = "gp2"
-    },
-  ]
+  root_block_device    = var.root_block_device
 
   # asg
   asg_name                     = var.name
