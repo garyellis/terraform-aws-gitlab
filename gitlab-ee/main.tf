@@ -44,7 +44,7 @@ resource "aws_ssm_parameter" "gitlab_runner_registration_token" {
 
 
 module "backups_s3_bucket" {
-  source = "terraform-aws-modules/s3-bucket/aws"
+  source = "github.com/terraform-aws-modules/terraform-aws-s3-bucket?ref=v1.9.0"
 
   bucket_prefix = format("%s-backups", var.name)
   acl           = "private"

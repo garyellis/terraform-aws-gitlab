@@ -119,7 +119,7 @@ module "userdata" {
 }
 
 module "instance" {
-  source = "terraform-aws-modules/autoscaling/aws"
+  source = "github.com/terraform-aws-modules/terraform-aws-autoscaling?ref=v3.8.0"
 
   name = var.name
 
