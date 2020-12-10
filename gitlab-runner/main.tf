@@ -119,7 +119,7 @@ module "userdata" {
 }
 
 module "instance" {
-  source = "terraform-aws-modules/autoscaling/aws"
+  source = "github.com/terraform-aws-modules/terraform-aws-autoscaling?ref=v3.8.0"
 
   name = var.name
 
@@ -131,12 +131,7 @@ module "instance" {
   image_id             = var.ami_id
   instance_type        = var.instance_type
   security_groups      = list(module.sg.security_group_id)
-  root_block_device = [
-    {
-      volume_size = "50"
-      volume_type = "gp2"
-    },
-  ]
+  root_block_device    = var.root_block_device
 
   # asg
   asg_name                     = var.name

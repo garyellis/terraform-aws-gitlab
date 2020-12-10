@@ -37,6 +37,16 @@ variable "key_name" {
   default     = ""
 }
 
+variable "root_block_device" {
+  description = "the gitlab runner root block device"
+  type        = list(map(string))
+  default     = [{
+      encrypted   = true
+      volume_size = "50"
+      volume_type = "gp2"
+    }]
+}
+
 variable "iam_role_policy_attachments" {
   description = "A list of iam policies attached to the ec2 instance role"
   type        = list(string)

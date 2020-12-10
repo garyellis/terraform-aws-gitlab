@@ -28,6 +28,7 @@ module "gitlab_runner" {
   name                        = format("%s-runner", var.name)
   instance_type               = var.gitlab_runner_instance_type
   ami_id                      = var.ami_id
+  root_block_device           = var.gitlab_runner_root_block_device
   key_name                    = var.key_name
   iam_role_policy_attachments = var.gitlab_runner_iam_role_policy_attachments
   subnet_ids                  = var.gitlab_runner_subnet_ids
