@@ -8,6 +8,8 @@ gitlab_runner_version=${gitlab_runner_version}
 gitlab_addr=${gitlab_addr}
 ssm_region=${ssm_region}
 gitlab_runner_registration_token=${ssm_parameter_gitlab_runner_registration_token}
+shell_runners_count=1
+docker_runners_count=1
 
 
 function install_awscli_bundle(){
@@ -66,28 +68,31 @@ fi
 
 
 ##### register the shell runner
-gitlab-runner register \
-  --non-interactive \
-  --template-config /etc/gitlab-runner/config.template.toml \
-  --url "$gitlab_addr" \
-  --registration-token "$(ssm_get_parameter $gitlab_runner_registration_token)" \
-  --executor "shell" \
-  --description "shell-runner_$${HOSTNAME}" \
-  --tag-list "shell" \
-  --run-untagged="true" \
-  --locked="false"
-
+for ((i=1;i<=$shell_runners_count;i++)); do
+  gitlab-runner register \
+    --non-interactive \
+    --template-config /etc/gitlab-runner/config.template.toml \
+    --url "$gitlab_addr" \
+    --registration-token "$(ssm_get_parameter $gitlab_runner_registration_token)" \
+    --executor "shell" \
+    --description "shell-runner$${i}-$(hostname -s)" \
+    --tag-list "shell" \
+    --run-untagged="true" \
+    --locked="false"
+done
 
 ##### register the docker runner
-gitlab-runner register \
-  --non-interactive \
-  --template-config /etc/gitlab-runner/config.template.toml \
-  --url "$gitlab_addr" \
-  --registration-token "$(ssm_get_parameter $gitlab_runner_registration_token)" \
-  --description "docker-runner_$${HOSTNAME}" \
-  --tag-list "docker" \
-  --run-untagged="true" \
-  --locked="false" \
-  --executor "docker" \
-  --docker-image alpine:latest \
-  --access-level="not_protected"
+for ((i=1;i<=$docker_runners_count;i++)); do
+  gitlab-runner register \
+    --non-interactive \
+    --template-config /etc/gitlab-runner/config.template.toml \
+    --url "$gitlab_addr" \
+    --registration-token "$(ssm_get_parameter $gitlab_runner_registration_token)" \
+    --description "docker-runner$${i}-$(hostname -s)" \
+    --tag-list "docker" \
+    --run-untagged="true" \
+    --locked="false" \
+    --executor "docker" \
+    --docker-image alpine:latest \
+    --access-level="not_protected"
+done

@@ -1,4 +1,5 @@
 data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
 
 locals {
   # consider variable inputs for ssm parameter names for loose coupling to gitlab-runner module
@@ -6,6 +7,14 @@ locals {
   ssm_parameter_path                      = format("/gitlab/%s", var.name)
   ssm_parameter_root_password             = format("%s/%s", local.ssm_parameter_path, "root/password")
   ssm_parameter_runner_registration_token = format("%s/%s", local.ssm_parameter_path, "runner/registration/token")
+
+  secretsmanager_secret_gitlab_secrets_json = format("gitlab/%s/gitlab-secrets.json", var.name)
+
+  secretsmanager_secret_backup_gitlab_secrets_arn = format(
+    "arn:aws:secretsmanager:%s:%s:secret:%s",
+    data.aws_region.current.name,
+    data.aws_caller_identity.current.account_id,
+    format("%s*", local.secretsmanager_secret_gitlab_secrets_json))
 }
 
 #### ssm parameters config
@@ -42,7 +51,6 @@ resource "aws_ssm_parameter" "gitlab_runner_registration_token" {
   tags        = {}
 }
 
-
 module "backups_s3_bucket" {
   source = "github.com/terraform-aws-modules/terraform-aws-s3-bucket?ref=v1.9.0"
 
@@ -62,7 +70,7 @@ module "backups_s3_bucket" {
 
 
 # https://docs.gitlab.com/ee/raketasks/backup_restore.html#other-s3-providers
-data "aws_iam_policy_document" "backups_s3" {
+data "aws_iam_policy_document" "gitlab_ee" {
   statement {
     sid    = "Stmt1412062044000"
     effect = "Allow"
@@ -112,7 +120,7 @@ data "aws_iam_policy_document" "backups_s3" {
     ]
     resources = list(
       aws_ssm_parameter.gitlab_root_password.arn,
-      aws_ssm_parameter.gitlab_runner_registration_token.arn
+      aws_ssm_parameter.gitlab_runner_registration_token.arn,
     )
   }
 
@@ -135,6 +143,30 @@ data "aws_iam_policy_document" "backups_s3" {
       var.ssm_kms_key_arn
     )
   }
+
+  statement {
+    sid    = "SecretsManagerList"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:ListSecrets"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "SecretsManagerReadWrite"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:Create*",
+      "secretsmanager:Put*",
+      "secretsmanager:Rotate*",
+      "secretsmanager:Update*",
+      "secretsmanager:GetSecretValue",
+    ]
+    resources = [
+      local.secretsmanager_secret_backup_gitlab_secrets_arn
+    ]
+  }
 }
 
 data "aws_iam_policy_document" "trust_policy" {
@@ -148,14 +180,14 @@ data "aws_iam_policy_document" "trust_policy" {
   }
 }
 
-resource "aws_iam_policy" "backups_s3_bucket" {
-  name_prefix = format("%s-s3_backups", var.name)
-  policy      = data.aws_iam_policy_document.backups_s3.json
+resource "aws_iam_policy" "gitlab_ee" {
+  name_prefix = var.name
+  policy      = data.aws_iam_policy_document.gitlab_ee.json
 }
 
-resource "aws_iam_role_policy_attachment" "backups_s3_bucket" {
+resource "aws_iam_role_policy_attachment" "gitlab_ee" {
   role       = aws_iam_role.instance.name
-  policy_arn = aws_iam_policy.backups_s3_bucket.arn
+  policy_arn = aws_iam_policy.gitlab_ee.arn
 }
 
 resource "aws_iam_role" "instance" {
@@ -193,14 +225,17 @@ module "sg" {
 
 locals {
   userdata_script = templatefile("${path.module}/userdata.tmpl", {
-    gitlab_ee_version                       = var.gitlab_ee_version
-    dns_fqdn                                = format("%s.%s", var.dns_name, var.dns_domain)
-    backups_s3_bucket                       = module.backups_s3_bucket.this_s3_bucket_id
-    backups_s3_bucket_region                = data.aws_region.current.name
-    ssm_region                              = data.aws_region.current.name
-    ssm_parameter_root_password             = aws_ssm_parameter.gitlab_root_password.name
-    ssm_parameter_runner_registration_token = aws_ssm_parameter.gitlab_runner_registration_token.name
-    secondary_block_device                  = "/dev/nvme1n1"
+    gitlab_ee_version                              = var.gitlab_ee_version
+    gitlab_ee_restore_enabled                      = var.gitlab_ee_restore_enabled
+    gitlab_ee_restore_s3_file                      = var.gitlab_ee_restore_s3_file
+    secretsmanager_secret_gitlab_secrets_json      = local.secretsmanager_secret_gitlab_secrets_json
+    dns_fqdn                                       = format("%s.%s", var.dns_name, var.dns_domain)
+    backups_s3_bucket                              = module.backups_s3_bucket.this_s3_bucket_id
+    backups_s3_bucket_region                       = data.aws_region.current.name
+    ssm_region                                     = data.aws_region.current.name
+    ssm_parameter_root_password                    = aws_ssm_parameter.gitlab_root_password.name
+    ssm_parameter_runner_registration_token        = aws_ssm_parameter.gitlab_runner_registration_token.name
+    secondary_block_device                         = "/dev/nvme1n1"
   })
 }
 
@@ -221,7 +256,7 @@ module "userdata" {
 
 
 module "instance" {
-  source = "github.com/garyellis/tf_module_aws_instance"
+  source = "github.com/garyellis/tf_module_aws_instance?ref=v1.3.2"
 
   count_instances             = 1
   name                        = var.name
@@ -235,6 +270,15 @@ module "instance" {
   security_group_attachments  = list(module.sg.security_group_id)
   subnet_ids                  = list(var.subnet_id)
   tags                        = var.tags
+
+  root_block_device = [{
+    delete_on_termination = true
+    volume_type           = "gp2"
+    volume_size           = 40
+    encrypted             = true
+    snapshot_id           = null
+    },
+  ]
 
   ebs_block_device = [{
     delete_on_termination = true

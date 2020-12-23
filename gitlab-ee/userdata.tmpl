@@ -7,19 +7,31 @@ exec > /tmp/bootstrap.log 2>&1
 gitlab_ee_version=${gitlab_ee_version}
 dns_fqdn=${dns_fqdn}
 
+# restore config
+restore_enabled=${gitlab_ee_restore_enabled}
+restore_s3_file=${gitlab_ee_restore_s3_file}
+
 # backup config
 backups_s3_bucket_region=${backups_s3_bucket_region}
 backups_s3_bucket=${backups_s3_bucket}
+backups_local_path=/opt/gitlab/backups
 
 # tls config
 tls_cert_selfsigned=true
-tls_cert_selfsigned_subject="/C=US/ST=Arizona/L=Scottsdale/O=EA/CN=$dns_fqdn"
+tls_cert_selfsigned_subject="/CN=$dns_fqdn"
+tls_cert_selfsigned_san=$dns_fqdn
 tls_cert_parameter_store=false
 
+# aws config
+aws_region=${ssm_region}
+
 # ssm config
-ssm_region=${ssm_region}
 ssm_parameter_root_password=${ssm_parameter_root_password}
 ssm_parameter_runner_registration_token=${ssm_parameter_runner_registration_token}
+
+# secretsmanager config
+secretsmanager_secret_gitlab_secrets_json="${secretsmanager_secret_gitlab_secrets_json}"
+gitlab_secrets_json_local_path="/etc/gitlab/gitlab-secrets.json"
 
 # disk config
 disk=${secondary_block_device}
@@ -28,6 +40,84 @@ lvname=lv-data
 mount_path=/opt
 fstype=xfs
 
+
+function install_helper_functions(){
+  cat > etc/profile.d/helper-functions.sh <<EOF
+function secret_exists(){
+  aws secretsmanager list-secrets --filters Key=name,Values=\$1 |
+  python -c 'import json,sys; secret=json.load(sys.stdin)["SecretList"];sys.exit(0) if len(secret) == 1 else sys.exit(1)'
+}
+
+function get_secret_value(){
+  if secret_exists \$1; then
+    aws secretsmanager get-secret-value --secret-id \$1 |
+    python -c 'import json,sys; secret=json.load(sys.stdin)["SecretString"]; print(secret)'
+  fi
+}
+
+function create_or_update_secret(){
+  if secret_exists \$1; then
+    aws secretsmanager update-secret \\
+      --secret-id \$1 \\
+      --secret-string \$2
+  else
+    aws secretsmanager create-secret \\
+      --name \$1 \\
+      --secret-string \$2
+  fi
+}
+
+function gitlab_ok(){
+  curl -k -s https://localhost/-/readiness |
+  python -c 'import json,sys;
+
+try:
+  status = json.load(sys.stdin)["status"]; sys.exit(0) if status == "ok" else sys.exit(1)
+except Exception as e:
+  sys.exit(1)
+'
+}
+
+function waitfor_gitlab_ok(){
+  until gitlab_ok; do echo "gitlab is unavailable; waiting"; sleep 5; done
+  echo 'gitlab is up'
+}
+
+function gitlab_restore_from_s3(){
+  gitlab_s3_backup_file=\$1
+  gitlab_backup_name=\$(basename "\$gitlab_s3_backup_file" |sed -e 's/_gitlab_backup.tar//')
+  backups_local_dir=\$2
+  secretsmanager_secret_gitlab_secrets_json=\$3
+  gitlab_secrets_json=\$4
+
+  echo "==> copying backup \$gitlab_s3_backup_file from s3"
+  aws s3 cp \$gitlab_s3_backup_file \$backups_local_dir
+
+  echo "==> getting gitlab-secrets.json from secretsmanager"
+  get_secret_value \$secretsmanager_secret_gitlab_secrets_json > \$${gitlab_secrets_json}.restore
+
+  echo "==> stopping unicorn, puma, and sidekiq services"
+  gitlab-ctl stop unicorn && \
+  gitlab-ctl stop puma && \
+  gitlab-ctl stop sidekiq && \
+  gitlab-ctl status
+
+  echo "==> services unicorn, puma, and sidekiq stopped"
+  (cd \$backups_local_dir && force=yes gitlab-backup restore BACKUP=\$gitlab_backup_name)
+  echo "==> gitlab-backup restore completed"
+
+  echo "==> restoring gitlab-secrets.json"
+  mv -f \$${gitlab_secrets_json}.restore \$${gitlab_secrets_json}
+
+  echo "==> restarting gitlab"
+  gitlab-ctl reconfigure
+  gitlab-ctl restart
+  gitlab-rake gitlab:check SANITIZE=true
+
+  waitfor_gitlab_ok
+}
+EOF
+}
 
 function setup_data_volume(){
   # install lvm package
@@ -92,7 +182,7 @@ function install_gitlab(){
 }
 
 function ssm_get_parameter(){
-  aws --region $${ssm_region} ssm get-parameters --name $1 --with-decryption| python -c 'import json,sys;print json.load(sys.stdin)["Parameters"][0]["Value"]'
+  aws --region $aws_region ssm get-parameters --name $1 --with-decryption| python -c 'import json,sys;print json.load(sys.stdin)["Parameters"][0]["Value"]'
 }
 
 
@@ -104,6 +194,7 @@ source /root/.bashrc
 #### prep system, install configuration deps, and install the application
 setup_data_volume
 install_awscli_bundle
+install_helper_functions
 install_gitlab
 
 
@@ -115,15 +206,21 @@ mkdir -p /etc/gitlab/ssl
 chmod 0700 /etc/gitlab/ssl
 
 
-#### setup a self signed certificate when tls_cert_selfsigned is true
+#### setup a self signed certificate when tls_cert_selfsigned is true. (this is the only option available currently)
 if [ "$tls_cert_selfsigned" = "true" ]; then
-
     openssl req -new -nodes -x509 -subj "$tls_cert_selfsigned_subject" \
       -days 730 \
       -keyout $server_certificate_key_path \
       -out $server_certificate_path \
-      -extensions v3_ca
-
+      -extensions v3_ca \
+      -config <( \
+      printf "%s\n" \
+      "[req]" \
+      "distinguished_name=req" \
+      "[v3_ca]" \
+      "keyUsage = digitalSignature, keyEncipherment" \
+      "extendedKeyUsage = serverAuth, clientAuth, codeSigning" \
+      "subjectAltName=DNS:$tls_cert_selfsigned_san")
 fi
 
 
@@ -140,6 +237,7 @@ gitlab_rails['backup_upload_connection'] = {
   'use_iam_profile' => true
 }
 gitlab_rails['backup_upload_remote_directory'] = '$backups_s3_bucket'
+gitlab_rails['backup_path'] = '$backups_local_path'
 gitlab_rails['monitoring_whitelist'] = ['0.0.0.0/0']
 $(if [ ! -z $HTTP_PROXY ]; then
     echo "gitlab_rails['env'] = { \"http_proxy\" => \"$http_proxy\", \"https_proxy\" => \"$https_proxy\", \"no_proxy\" => \"$no_proxy\" }"
@@ -161,15 +259,53 @@ cat > /usr/local/bin/postinstall.sh <<EOF
 
 exec > /tmp/postinstall.sh.log 2>&1
 
+#### setup environment
+export PATH=/usr/local/bin:\$PATH
+source /etc/profile.d/helper-functions.sh
+
+# restore config
+restore_enabled=$restore_enabled
+restore_s3_file=$restore_s3_file
+backups_local_path=$backups_local_path
+
+
+# aws secretsmanager config
+aws_region=$aws_region
+secretsmanager_secret_gitlab_secrets_json=$secretsmanager_secret_gitlab_secrets_json
+gitlab_secrets_json_local_path=$gitlab_secrets_json_local_path
+
+export AWS_DEFAULT_REGION=\$aws_region
+
 until systemctl is-active multi-user.target; do
   echo "waiting for is-active multi-user.target..."
   sleep 5
 done
 
+# run the postinstall cron task once
+rm -f /etc/cron.d/postinstall
+
 gitlab-ctl reconfigure
 systemctl restart gitlab-runsvdir
 
-rm -f /etc/cron.d/postinstall
+# wait for gitlab to come online
+waitfor_gitlab_ok
+
+# make sure gitlab is still up before proceeding with restore
+sleep 20
+waitfor_gitlab_ok
+
+# when restore_enabled is true, restore from s3 backup and secretsmanager
+if [ "\$restore_enabled" == "true" ]; then
+  gitlab_restore_from_s3 \\
+    \$restore_s3_file \\
+    \$backups_local_path \\
+    \$secretsmanager_secret_gitlab_secrets_json \\
+    \$gitlab_secrets_json_local_path
+else
+  create_or_update_secret \\
+    \$secretsmanager_secret_gitlab_secrets_json \\
+    file://\$gitlab_secrets_json_local_path
+fi
 
 EOF
 
