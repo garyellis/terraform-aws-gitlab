@@ -48,12 +48,16 @@ module "gitlab" {
 
   ssm_kms_key_arn = var.ssm_kms_key_arn
 
+  gitlab_ee_restore_enabled = true
+  gitlab_ee_restore_s3_file = "s3://tf-module-gitlab-backups20200508190123131600000004/daily/1608706822_2020_12_23_12.9.2-ee_gitlab_backup.tar"
+
   http_proxy  = "http://squid-proxy.shared-services.ews.works:3128"
   https_proxy = "http://squid-proxy.shared-services.ews.works:3128"
   no_proxy    = "localhost,127.0.0.1,::1,169.254.169.254,169.254.170.2,ews.works"
 
 }
 
+/*
 module "gitlab_noproxy" {
   source = "../"
 
@@ -72,7 +76,7 @@ module "gitlab_noproxy" {
   ssm_kms_key_arn = var.ssm_kms_key_arn
 
 }
-
+*/
 output "gitlab_url" {
   value = module.gitlab.gitlab_url
 }
@@ -85,7 +89,7 @@ output "ssm_parameter_gitlab_runner_registration_token" {
   value = module.gitlab.ssm_parameter_gitlab_runner_registration_token
 }
 
-
+/*
 output "gitlab_noproxy_url" {
   value = module.gitlab_noproxy.gitlab_url
 }
@@ -97,4 +101,4 @@ output "ssm_parameter_gitlab_noproxy_root_password" {
 output "ssm_parameter_gitlab_noproxy_runner_registration_token" {
   value = module.gitlab_noproxy.ssm_parameter_gitlab_runner_registration_token
 }
-
+*/

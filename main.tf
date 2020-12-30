@@ -15,7 +15,9 @@ module "gitlab_ee" {
 
   ssm_kms_key_arn = var.ssm_kms_key_arn
 
-  gitlab_ee_version = var.gitlab_ee_version
+  gitlab_ee_version         = var.gitlab_ee_version
+  gitlab_ee_restore_enabled = var.gitlab_ee_restore_enabled
+  gitlab_ee_restore_s3_file = var.gitlab_ee_restore_s3_file
 
   http_proxy  = var.http_proxy
   https_proxy = var.https_proxy

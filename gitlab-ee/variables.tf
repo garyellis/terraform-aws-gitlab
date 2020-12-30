@@ -4,6 +4,18 @@ variable "gitlab_ee_version" {
   default     = "12.9.2"
 }
 
+variable "gitlab_ee_restore_enabled" {
+  description = "The gitlab runner version"
+  type        = bool
+  default     = false
+}
+
+variable "gitlab_ee_restore_s3_file" {
+  description = "The gitlab backup s3 path. i.e. s3://my-bucket-name/daily/my-backup.tar "
+  type        = string
+  default     = ""
+}
+
 variable "name" {
   description = "the resources name"
   type        = string
@@ -43,7 +55,7 @@ variable "vpc_id" {
 variable "instance_type" {
   description = "the aws instance type"
   type        = string
-  default     = "t3.xlarge"
+  default     = "t3a.xlarge"
 }
 
 variable "disable_api_termination" {
