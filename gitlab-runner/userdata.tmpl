@@ -64,7 +64,11 @@ if [ ! -z $HTTP_PROXY ]; then
 EOF
 
 fi
+cat >> /etc/gitlab-runner/config.template.toml <<EOF
 
+  [runners.docker]
+    helper_image = "gitlab/gitlab-runner-helper:x86_64-v13.7.0"
+EOF
 
 
 ##### register the shell runner
